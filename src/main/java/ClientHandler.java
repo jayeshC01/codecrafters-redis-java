@@ -6,7 +6,8 @@ import java.util.*;
 class ClientHandler implements Runnable {
 
   private final Socket clientSocket;
-  private Map<String, String> datastore = new HashMap<>();
+  private Map<String, DataStoreValue> datastore = new HashMap<>();
+  private Set<String> setMethodOptions = Set.of("PX", "EX", "NX", "XX");
 
   public ClientHandler(Socket clientSocket) {
     this.clientSocket = clientSocket;
@@ -66,24 +67,58 @@ class ClientHandler implements Runnable {
         return "$" + cmd.get(1).length() + "\r\n" + cmd.get(1) + "\r\n";
       }
       case "set": {
-        if (cmd.size() != 3) {
-          return "-ERR invalid command set - wrong number of arguments";
+        if (cmd.size() < 3 || cmd.size() > 5) {
+          return "-ERR wrong number of arguments for 'SET' command";
         }
-        datastore.put(cmd.get(1), cmd.get(2));
+
+        String key = cmd.get(1);
+        String value = cmd.get(2);
+        String option = cmd.size() >= 4 ? cmd.get(3).toUpperCase() : null;
+        String expiryArg = cmd.size() == 5 ? cmd.get(4) : null;
+        long expiryMillis = 0;
+
+        if ("EX".equals(option) || "PX".equals(option)) {
+          if (expiryArg == null) {
+            return "-ERR missing expiry time for EX/PX option";
+          }
+
+          try {
+            long expiryTime = Long.parseLong(expiryArg);
+            expiryMillis = System.currentTimeMillis() + (
+                "EX".equals(option) ? expiryTime * 1000 : expiryTime
+            );
+          } catch (NumberFormatException e) {
+            return "-ERR invalid expiry time - must be a number";
+          }
+        }
+
+        if ("NX".equals(option)) {
+          if (datastore.containsKey(key)) {
+            return "$-1\r\n"; // Don't overwrite existing key
+          }
+        } else if ("XX".equals(option)) {
+          if (!datastore.containsKey(key)) {
+            return "$-1\r\n"; // Don't set if key doesn't exist
+          }
+        } else if (option != null && !"EX".equals(option) && !"PX".equals(option)) {
+          return "-ERR unknown option: " + option;
+        }
+
+        datastore.put(key, new DataStoreValue(value, expiryMillis));
         return "+OK\r\n";
       }
       case "get": {
         if (cmd.size() != 2) {
           return "-ERR invalid command get - wrong number of arguments";
         }
-        String data = datastore.get(cmd.get(1));
-        if(data!=null) {
-          return "$" + data.length() + "\r\n" + data + "\r\n";
+        DataStoreValue data = datastore.get(cmd.get(1));
+        if(data!=null && !data.isExpired()) {
+          return "$" + data.getValue().length() + "\r\n" + data.getValue() + "\r\n";
         }
         return "$-1\r\n";
       }
       default:
-        return "Invalid Command";
+        return "-ERR Invalid Command";
     }
   }
 }
