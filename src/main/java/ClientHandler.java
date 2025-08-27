@@ -1,17 +1,12 @@
 import java.lang.*;
 import java.net.Socket;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.util.List;
+import java.io.*;
 import java.util.*;
 
 class ClientHandler implements Runnable {
 
   private final Socket clientSocket;
+  private Map<String, String> datastore = new HashMap<>();
 
   public ClientHandler(Socket clientSocket) {
     this.clientSocket = clientSocket;
@@ -44,7 +39,7 @@ class ClientHandler implements Runnable {
     }
   }
 
-  public List<String> parseRespCommand(BufferedReader reader) throws IOException {
+  private List<String> parseRespCommand(BufferedReader reader) throws IOException {
     List<String> commandParts = new ArrayList<>();
     String st = reader.readLine();
     if (st == null || !st.startsWith("*")) {
@@ -59,16 +54,33 @@ class ClientHandler implements Runnable {
     return commandParts;
   }
 
-  public String processCommand(List<String> cmd) {
+  private String processCommand(List<String> cmd) {
     System.out.println("Processing the command: " + cmd.toString());
     switch (cmd.get(0).toLowerCase()) {
       case "ping":
         return "+PONG\r\n";
       case "echo": {
         if (cmd.size() != 2) {
-          return "-ERR invalid command ECHO";
+          return "-ERR invalid command ECHO - wrong number of arguments";
         }
         return "$" + cmd.get(1).length() + "\r\n" + cmd.get(1) + "\r\n";
+      }
+      case "set": {
+        if (cmd.size() != 3) {
+          return "-ERR invalid command set - wrong number of arguments";
+        }
+        datastore.put(cmd.get(1), cmd.get(2));
+        return "+OK\r\n";
+      }
+      case "get": {
+        if (cmd.size() != 2) {
+          return "-ERR invalid command get - wrong number of arguments";
+        }
+        String data = datastore.get(cmd.get(1));
+        if(data!=null) {
+          return "$" + data.length() + "\r\n" + data + "\r\n";
+        }
+        return "$-1\r\n";
       }
       default:
         return "Invalid Command";
