@@ -57,16 +57,16 @@ class ClientHandler implements Runnable {
 
   private String processCommand(List<String> cmd) {
     System.out.println("Processing the command: " + cmd.toString());
-    switch (cmd.get(0).toLowerCase()) {
-      case "ping":
+    switch (cmd.get(0).toUpperCase()) {
+      case "PING":
         return "+PONG\r\n";
-      case "echo": {
+      case "ECHO": {
         if (cmd.size() != 2) {
           return "-ERR invalid command ECHO - wrong number of arguments";
         }
         return "$" + cmd.get(1).length() + "\r\n" + cmd.get(1) + "\r\n";
       }
-      case "set": {
+      case "SET": {
         if (cmd.size() < 3 || cmd.size() > 5) {
           return "-ERR wrong number of arguments for 'SET' command";
         }
@@ -107,7 +107,7 @@ class ClientHandler implements Runnable {
         datastore.put(key, new DataStoreValue(value, expiryMillis));
         return "+OK\r\n";
       }
-      case "get": {
+      case "GET": {
         if (cmd.size() != 2) {
           return "-ERR invalid command get - wrong number of arguments";
         }
@@ -117,8 +117,21 @@ class ClientHandler implements Runnable {
         }
         return "$-1\r\n";
       }
+      case "INCR": {
+        return processCommandIncr(cmd);
+      }
       default:
         return "-ERR Invalid Command";
     }
+  }
+
+  private String processCommandIncr(List<String> cmd) {
+    if(cmd.size() != 2){
+      return "-ERR - Incorrect argument INCR method";
+    }
+    DataStoreValue existingValue = datastore.get(cmd.get(1));
+    existingValue.updateValue(String.valueOf(Integer.parseInt(existingValue.getValue()) + 1));
+    datastore.put(cmd.get(1), existingValue);
+    return ":"+existingValue.getValue()+"\r\n";
   }
 }
