@@ -129,13 +129,18 @@ class ClientHandler implements Runnable {
     if(cmd.size() != 2){
       return "-ERR - Incorrect argument INCR method";
     }
-    DataStoreValue existingValue = datastore.get(cmd.get(1));
-    if(existingValue == null) {
+    DataStoreValue data = datastore.get(cmd.get(1));
+    if(data == null || data.isExpired()) {
       datastore.put(cmd.get(1), new DataStoreValue(1));
       return ":1\r\n";
     }
-    existingValue.updateValue(String.valueOf(Integer.parseInt(existingValue.getValue()) + 1));
-    datastore.put(cmd.get(1), existingValue);
-    return ":"+existingValue.getValue()+"\r\n";
+    try {
+      long existingValue = Long.parseLong(data.getValue());
+      data.updateValue(String.valueOf(existingValue + 1));
+      datastore.put(cmd.get(1), data);
+      return ":"+data.getValue()+"\r\n";
+    } catch(NumberFormatException e) {
+      return "-ERR value is not an integer or out of range\r\n";
+    }
   }
 }

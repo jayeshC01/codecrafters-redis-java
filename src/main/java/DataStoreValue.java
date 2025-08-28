@@ -12,7 +12,7 @@ public class DataStoreValue {
     this.expiryTimeMillis = 0;
   }
 
-  public DataStoreValue(int value) {
+  public DataStoreValue(long value) {
     this.value = String.valueOf(value);
     this.expiryTimeMillis = 0;
   }
