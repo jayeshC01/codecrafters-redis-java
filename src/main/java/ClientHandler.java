@@ -130,6 +130,10 @@ class ClientHandler implements Runnable {
       return "-ERR - Incorrect argument INCR method";
     }
     DataStoreValue existingValue = datastore.get(cmd.get(1));
+    if(existingValue == null) {
+      datastore.put(cmd.get(1), new DataStoreValue(1));
+      return ":1\r\n";
+    }
     existingValue.updateValue(String.valueOf(Integer.parseInt(existingValue.getValue()) + 1));
     datastore.put(cmd.get(1), existingValue);
     return ":"+existingValue.getValue()+"\r\n";
