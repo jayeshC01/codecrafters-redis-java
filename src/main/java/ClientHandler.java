@@ -28,7 +28,7 @@ class ClientHandler implements Runnable {
               new OutputStreamWriter(clientSocket.getOutputStream()));
       while (true) {
         List<String> cmdparts = parseRespCommand(reader);
-        if(isTransactionEnabled) {
+        if(isTransactionEnabled && !cmdparts.get(0).equalsIgnoreCase("DISCARD")) {
           response = queueCommands(cmdparts);
         } else {
           response = processCommand(cmdparts);
@@ -72,8 +72,9 @@ class ClientHandler implements Runnable {
       case "SET": return processCommandSet(cmd);
       case "GET": return processCommandGet(cmd);
       case "INCR": return processCommandIncr(cmd);
-      case "MULTI": return processCommandMulti(cmd);
+      case "MULTI": return processCommandMulti();
       case "EXEC": return processCommandExec();
+      case "DISCARD": return processCommandDiscard();
       default:
         return "-ERR Invalid Command";
     }
@@ -161,7 +162,7 @@ System.out.println("Command" + cmd);
     }
   }
 
-  private String processCommandMulti(List<String> cmd) {
+  private String processCommandMulti() {
     isTransactionEnabled = true;
     return "+OK\r\n";
   }
@@ -194,5 +195,14 @@ System.out.println("Command" + cmd);
       return "+QUEUED\r\n";
     }
     return processCommandExec();
+  }
+
+  private String processCommandDiscard() {
+    if(isTransactionEnabled){
+      queuedCommands.clear();
+      isTransactionEnabled=false;
+      return "+OK\r\n";
+    }
+    return "-ERR DISCARD without MULTI\r\n";
   }
 }
