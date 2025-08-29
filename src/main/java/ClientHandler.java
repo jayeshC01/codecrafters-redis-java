@@ -78,9 +78,36 @@ class ClientHandler implements Runnable {
       case "DISCARD": return processCommandDiscard();
       case "RPUSH": return processCommandRpush(cmd);
       case "LRANGE": return processCommandLrange(cmd);
+      case "LPUSH": return processCommandLpush(cmd);
+      case "LLEN": return processCommandLlen(cmd);
       default:
         return RespUtility.buildErrorResponse("Invalid Command: "+ cmd.toString());
     }
+  }
+
+  private String processCommandLlen(List<String> cmd) {
+    DataStoreValue data = datastore.get(cmd.get(1));
+    if(data == null) {
+      return RespUtility.serializeResponse(0);
+    }
+    try {
+      return RespUtility.serializeResponse(data.getAsList().size());
+    } catch (Exception e) {
+      return RespUtility.buildErrorResponse("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
+
+  }
+
+  private String processCommandLpush(List<String> cmd) {
+    DataStoreValue data = datastore.get(cmd.get(1));
+    if(data == null) {
+      datastore.put(cmd.get(1), new DataStoreValue(cmd.subList(2, cmd.size())));
+      return RespUtility.serializeResponse(cmd.size()-2);
+    }
+    LinkedList<String> existingList = new LinkedList(data.getAsList());
+    cmd.subList(2, cmd.size()).forEach(e -> existingList.addFirst(e));
+    data.updateValue(existingList);
+    return RespUtility.serializeResponse(data.getAsList().size());
   }
 
   private String processCommandLrange(List<String> cmd) {
@@ -96,16 +123,13 @@ class ClientHandler implements Runnable {
       // Normalize negative indexes
       if (start < 0) start = size + start;
       if (end < 0) end = size + end;
-
-      // Clamp to valid range
+      // Calculating Valid Range
       start = Math.max(0, start);
       end = Math.min(end, size - 1);
-
-      // Handle empty range
       if (start > end || start >= size) {
         return RespUtility.serializeResponse(Collections.emptyList());
       }
-      List<String> response = element.subList(start, end + 1); 
+      List<String> response = element.subList(start, end + 1);
       return RespUtility.serializeResponse(response);
     } catch (Exception e) {
       return RespUtility.buildErrorResponse("WRONGTYPE Operation against a key holding the wrong kind of value");
