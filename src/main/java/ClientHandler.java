@@ -80,8 +80,29 @@ class ClientHandler implements Runnable {
       case "LRANGE": return processCommandLrange(cmd);
       case "LPUSH": return processCommandLpush(cmd);
       case "LLEN": return processCommandLlen(cmd);
+      case "LPOP": return processCommandLpop(cmd);
       default:
         return RespUtility.buildErrorResponse("Invalid Command: "+ cmd.toString());
+    }
+  }
+
+  private String processCommandLpop(List<String> cmd) {
+    DataStoreValue data = datastore.get(cmd.get(1));
+    if(data == null) {
+      return RespUtility.serializeResponse(null);
+    }
+    try {
+      if(cmd.size() == 2) {
+        return RespUtility.serializeResponse(data.getAsLinkedList().pollFirst());
+      }
+      List<String> responses = new ArrayList();
+
+      for (int i = 0; i < Integer.parseInt(cmd.get(2)) && !data.getAsLinkedList().isEmpty(); i++) {
+        responses.add(data.getAsLinkedList().pollFirst());
+      }
+      return RespUtility.serializeResponse(responses);
+    } catch (Exception e) {
+      return RespUtility.buildErrorResponse("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
   }
 

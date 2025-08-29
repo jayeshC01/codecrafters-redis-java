@@ -39,6 +39,10 @@ public class DataStoreValue {
     return isList() ? (List<String>) value : null;
   }
 
+  public LinkedList<String> getAsLinkedList() {
+    return isList() ? (LinkedList<String>) value : null;
+  }
+
   public Long getAsLong() {
     return Long.parseLong(String.valueOf(value));
   }
