@@ -5,13 +5,16 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 
+import models.DataStoreValue;
+import utility.RespUtility;
+
 class ClientHandler implements Runnable {
 
   private final Socket clientSocket;
-  private static Map<String, DataStoreValue> datastore = new ConcurrentHashMap<>();
-  private Set<String> setMethodOptions = Set.of("PX", "EX", "NX", "XX");
+  private final static Map<String, DataStoreValue> datastore = new ConcurrentHashMap<>();
+  private final static Map<String, Queue<Thread>> waiterThreads = new ConcurrentHashMap<>();
   private boolean isTransactionEnabled = false;
-  private List<List<String>> queuedCommands = new ArrayList<>();
+  private final List<List<String>> queuedCommands = new ArrayList<>();
 
   public ClientHandler(Socket clientSocket) {
     this.clientSocket = clientSocket;
@@ -26,8 +29,10 @@ class ClientHandler implements Runnable {
       BufferedWriter writer =
           new BufferedWriter(
               new OutputStreamWriter(clientSocket.getOutputStream()));
-      while (true) {
+      while(true) {
         List<String> cmdparts = RespUtility.parseRespCommand(reader);
+        System.out.println("DataStore before process execution starts:");
+        datastore.forEach((k, v) -> System.out.println(k + " -> " + v));
         System.out.println("Executing Command: "+cmdparts);
         if(isTransactionEnabled && !cmdparts.get(0).equalsIgnoreCase("DISCARD")) {
           response = queueCommands(cmdparts);
@@ -51,21 +56,6 @@ class ClientHandler implements Runnable {
     }
   }
 
-  private List<String> parseRespCommand(BufferedReader reader) throws IOException {
-    List<String> commandParts = new ArrayList<>();
-    String st = reader.readLine();
-    if (st == null || !st.startsWith("*")) {
-      throw new IOException("Invalid RESP format: Expected array start '*'");
-    }
-    int noOfElements = Integer.parseInt(st.substring(1));
-    for (int i = 0; i < noOfElements; i++) {
-      reader.readLine(); // fetching the bulksize of next content ignoring as we are using BufferedReader
-      String content = reader.readLine();
-      commandParts.add(content);
-    }
-    return commandParts;
-  }
-
   private String processCommand(List<String> cmd) {
     switch (cmd.get(0).toUpperCase()) {
       case "PING": return RespUtility.buildSimpleResponse("PONG");
@@ -81,9 +71,66 @@ class ClientHandler implements Runnable {
       case "LPUSH": return processCommandLpush(cmd);
       case "LLEN": return processCommandLlen(cmd);
       case "LPOP": return processCommandLpop(cmd);
+      case "BLPOP": return processCommandBlpop(cmd);
       default:
-        return RespUtility.buildErrorResponse("Invalid Command: "+ cmd.toString());
+        return RespUtility.buildErrorResponse("Invalid Command: "+ cmd);
     }
+  }
+
+  private String processCommandBlpop(List<String> cmd) {
+    String key = cmd.get(1);
+    long timeout;
+
+    System.out.println("DataStore before blpop execution starts:");
+    datastore.forEach((k, v) -> System.out.println(k + " -> " + v));
+
+    try {
+      timeout = Long.parseLong(cmd.get(2));
+    } catch (NumberFormatException e) {
+      return RespUtility.buildErrorResponse("Invalid timeout argument");
+    }
+
+    DataStoreValue data = datastore.get(key);
+    //If data is present fetch and return it
+    if(data!=null && !data.getAsLinkedList().isEmpty()) {
+      System.out.println("Serializing the output of BLPOP comand:"+ data.getAsLinkedList());
+      return RespUtility.serializeResponse(List.of(key, data.getAsLinkedList().poll()));
+    }
+
+
+
+    //Check for time out
+
+    // Block the thread
+    Thread current = Thread.currentThread();
+    System.out.println("The list is not present --- waiting"+current + "name"+current.getName());
+    waiterThreads.computeIfAbsent(key, k -> new LinkedList<>()).add(current);
+    System.out.println("WaiterThreadUpdated:   "+ waiterThreads);
+    synchronized (current) {
+      try {
+        if (timeout == 0) {
+          current.wait();  // wait indefinitely
+        } else {
+          current.wait(timeout * 1000); // wait with timeout
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        return RespUtility.buildErrorResponse("Interrupted while waiting");
+      }
+    }
+    System.out.println("========================");
+    System.out.println("DataStore after thread resumes blpop");
+    datastore.forEach((k, v) -> System.out.println(k + " -> " + v.getAsString()));
+    System.out.println("Thread resumed "+current);
+    System.out.println("========================");
+    data = datastore.get(key);
+    //If data is present fetch and return it
+    if(data!=null && !data.getAsLinkedList().isEmpty()) {
+      System.out.println("Serializing the output of BLPOP comand after wait:"+ data.getAsLinkedList());
+      return RespUtility.serializeResponse(List.of(key, data.getAsLinkedList().poll()));
+    }
+    System.out.println("Serializing the null response of BLPOP comand:");
+    return RespUtility.serializeResponse(null);
   }
 
   private String processCommandLpop(List<String> cmd) {
@@ -116,19 +163,46 @@ class ClientHandler implements Runnable {
     } catch (Exception e) {
       return RespUtility.buildErrorResponse("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
-
   }
 
   private String processCommandLpush(List<String> cmd) {
     DataStoreValue data = datastore.get(cmd.get(1));
     if(data == null) {
       datastore.put(cmd.get(1), new DataStoreValue(cmd.subList(2, cmd.size())));
+      notifyWaiter(cmd.get(1));
       return RespUtility.serializeResponse(cmd.size()-2);
     }
     LinkedList<String> existingList = new LinkedList(data.getAsList());
     cmd.subList(2, cmd.size()).forEach(e -> existingList.addFirst(e));
     data.updateValue(existingList);
+    notifyWaiter(cmd.get(1));
     return RespUtility.serializeResponse(data.getAsList().size());
+  }
+
+  private void notifyWaiter(String key) {
+    System.out.println("Strated notifying threads");
+    Queue<Thread> queue = waiterThreads.get(key);
+    System.out.println("Fetched queue: "+queue);
+    if (queue == null) {
+      System.out.println("Queue is empty no notification send");
+    } else {
+      System.out.println("Logs below");
+    }
+    if (queue != null) {
+      Thread lock = queue.poll();
+      System.out.println("Fetched lock as queue is not empty");
+      if (lock != null) {
+        System.out.println("Lock is not empty");
+        synchronized (lock) {
+          System.out.println("Notyfying Thread"+lock);
+          lock.notify();
+          System.out.println("Notifyed Thread"+lock);
+        }
+      }
+      if (queue.isEmpty()) {
+        waiterThreads.remove(key, queue);
+      }
+    }
   }
 
   private String processCommandLrange(List<String> cmd) {
@@ -160,11 +234,29 @@ class ClientHandler implements Runnable {
   private String processCommandRpush(List<String> cmd) {
     DataStoreValue data = datastore.get(cmd.get(1));
     if(data == null) {
-      datastore.put(cmd.get(1), new DataStoreValue(cmd.subList(2, cmd.size())));
+      datastore.put(cmd.get(1), new DataStoreValue(new LinkedList<>(cmd.subList(2, cmd.size()))));
+      notifyWaiter(cmd.get(1));
+
+      System.out.println("The status of waiterQueue when rpush is performed"+waiterThreads);
+      System.out.println("Serializeing the output of rpush command: "+ new LinkedList<>(cmd.subList(2, cmd.size()))
+          +"\n Serialed output is: "+RespUtility.serializeResponse(cmd.size()-2));
+
+      System.out.println("DataStore before after Rpush execution:");
+      datastore.forEach((k, v) -> System.out.println(k + " -> " + v));
+
+
       return RespUtility.serializeResponse(cmd.size()-2);
     }
-    List<String> existingList = data.getAsList();
+    LinkedList<String> existingList = data.getAsLinkedList();
     existingList.addAll(cmd.subList(2, cmd.size()));
+    notifyWaiter(cmd.get(1));
+
+    System.out.println("The status of waiterQueue when rpush is performed"+waiterThreads);
+    System.out.println("Serializeing the output of rpush command: "+existingList
+        +"\n Serialed output is: "+RespUtility.serializeResponse(data.getAsList().size()));
+    System.out.println("DataStore before after Rpush execution:");
+    datastore.forEach((k, v) -> System.out.println(k + " -> " + v));
+
     return RespUtility.serializeResponse(data.getAsList().size());
   }
 

@@ -1,9 +1,9 @@
+package utility;
+
 import java.lang.*;
-import java.net.Socket;
 import java.io.*;
 import java.util.*;
 import java.util.stream.Collectors;
-
 
 public class RespUtility {
   private RespUtility(){}
@@ -16,7 +16,7 @@ public class RespUtility {
     }
     int noOfElements = Integer.parseInt(st.substring(1));
     for (int i = 0; i < noOfElements; i++) {
-      reader.readLine(); // fetching the bulksize of next content ignoring as we are using BufferedReader
+      reader.readLine(); // fetching the bulk size of next content ignoring as we are using BufferedReader
       String content = reader.readLine();
       commandParts.add(content);
     }

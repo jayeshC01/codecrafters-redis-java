@@ -1,4 +1,5 @@
-import java.io.*;
+package models;
+
 import java.util.*;
 
 public class DataStoreValue {
@@ -35,10 +36,12 @@ public class DataStoreValue {
     return isString() ? (String) value : null;
   }
 
+  @SuppressWarnings("unchecked")
   public List<String> getAsList() {
     return isList() ? (List<String>) value : null;
   }
 
+  @SuppressWarnings("unchecked")
   public LinkedList<String> getAsLinkedList() {
     return isList() ? (LinkedList<String>) value : null;
   }
