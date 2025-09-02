@@ -1,5 +1,7 @@
 package utility;
 
+import models.RespCommand;
+
 import java.lang.*;
 import java.io.*;
 import java.util.*;
@@ -8,19 +10,33 @@ import java.util.stream.Collectors;
 public class RespUtility {
   private RespUtility(){}
 
-  public static List<String> parseRespCommand(BufferedReader reader) throws IOException {
-    List<String> commandParts = new ArrayList<>();
-    String st = reader.readLine();
-    if (st == null || !st.startsWith("*")) {
-      throw new IOException("Invalid RESP format: Expected array start '*'");
+  /**
+   * The command format is *<number of elements>\r\n$<number of bytes of first element>\r\n<first element>\r\n$<number of bytes of second element>\r\n<second element>\r\n ....
+   * E.g: *3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n
+   *
+   * @param reader client input stream
+   * @return RespCommand representation
+   * @throws IOException
+   */
+  public static RespCommand parseRespCommand(BufferedReader reader) throws IOException {
+    List<String> args = new ArrayList<>();
+    String header = reader.readLine();
+    if (header == null || !header.startsWith("*")) {
+      throw new IOException("Invalid command - Invalid RESP format: Expected array start '*'");
     }
-    int noOfElements = Integer.parseInt(st.substring(1));
-    for (int i = 0; i < noOfElements; i++) {
+    int noOfElements = Integer.parseInt(header.substring(1));
+    reader.readLine(); // Fetching size of command
+    String commandName = reader.readLine(); //Fetched command name
+    for (int i = 0; i < noOfElements-1; i++) {
       reader.readLine(); // fetching the bulk size of next content ignoring as we are using BufferedReader
       String content = reader.readLine();
-      commandParts.add(content);
+      if (content == null) {
+        throw new IOException("Invalid command - Missing argument content");
+      }
+      args.add(content);
     }
-    return commandParts;
+
+    return new RespCommand(commandName, args);
   }
 
   public static String buildErrorResponse(String message) {
