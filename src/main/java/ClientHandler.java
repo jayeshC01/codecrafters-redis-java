@@ -79,57 +79,79 @@ class ClientHandler implements Runnable {
 
   private String processCommandBlpop(List<String> cmd) {
     String key = cmd.get(1);
-    long timeout;
+    double timeoutSeconds;
+    long timeoutMillis;
 
     System.out.println("DataStore before blpop execution starts:");
     datastore.forEach((k, v) -> System.out.println(k + " -> " + v));
-
+    System.out.println("in blpop: "+cmd);
+    System.out.println("timeout:"+ "cmd 2  :"+cmd.get(2));
     try {
-      timeout = Long.parseLong(cmd.get(2));
+      System.out.println("timeout:"+ "cmd 2  :"+cmd.get(2));
+      timeoutSeconds = Double.parseDouble(cmd.get(2));
+      timeoutMillis = (long) (timeoutSeconds * 1000);
+
     } catch (NumberFormatException e) {
       return RespUtility.buildErrorResponse("Invalid timeout argument");
     }
 
     DataStoreValue data = datastore.get(key);
-    //If data is present fetch and return it
-    if(data!=null && !data.getAsLinkedList().isEmpty()) {
-      System.out.println("Serializing the output of BLPOP comand:"+ data.getAsLinkedList());
+    // If data is present fetch and return it
+    if (data != null && !data.getAsLinkedList().isEmpty()) {
+      System.out.println("Serializing the output of BLPOP command: " + data.getAsLinkedList());
       return RespUtility.serializeResponse(List.of(key, data.getAsLinkedList().poll()));
     }
 
-
-
-    //Check for time out
-
     // Block the thread
     Thread current = Thread.currentThread();
-    System.out.println("The list is not present --- waiting"+current + "name"+current.getName());
+    System.out.println("The list is not present --- waiting " + current + " name=" + current.getName());
     waiterThreads.computeIfAbsent(key, k -> new LinkedList<>()).add(current);
-    System.out.println("WaiterThreadUpdated:   "+ waiterThreads);
+    System.out.println("WaiterThreadUpdated:   " + waiterThreads);
+
+    boolean timedOut = false;
     synchronized (current) {
       try {
-        if (timeout == 0) {
+        if (timeoutSeconds == 0) {
           current.wait();  // wait indefinitely
         } else {
-          current.wait(timeout * 1000); // wait with timeout
+          current.wait(timeoutMillis); // wait with timeout
+          // After wait returns, check if we woke up due to timeout
+          timedOut = true;
         }
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         return RespUtility.buildErrorResponse("Interrupted while waiting");
       }
     }
+
     System.out.println("========================");
     System.out.println("DataStore after thread resumes blpop");
     datastore.forEach((k, v) -> System.out.println(k + " -> " + v.getAsString()));
-    System.out.println("Thread resumed "+current);
+    System.out.println("Thread resumed " + current);
     System.out.println("========================");
+
     data = datastore.get(key);
-    //If data is present fetch and return it
-    if(data!=null && !data.getAsLinkedList().isEmpty()) {
-      System.out.println("Serializing the output of BLPOP comand after wait:"+ data.getAsLinkedList());
+    // If data is present fetch and return it
+    if (data != null && !data.getAsLinkedList().isEmpty()) {
+      System.out.println("Serializing the output of BLPOP command after wait: " + data.getAsLinkedList());
       return RespUtility.serializeResponse(List.of(key, data.getAsLinkedList().poll()));
     }
-    System.out.println("Serializing the null response of BLPOP comand:");
+
+    // If we timed out and no data arrived, remove from waiterThreads
+    if (timedOut) {
+      Queue<Thread> queue = waiterThreads.get(key);
+      if (queue != null) {
+        queue.remove(current);
+        if (queue.isEmpty()) {
+          waiterThreads.remove(key);
+        }
+      }
+      System.out.println("BLPOP timeout expired, returning NIL for " + current);
+      return "*-1\r\n";
+    }
+
+    // Default fallback (shouldn’t happen, but safe)
+    System.out.println("Serializing the null response of BLPOP command:");
     return RespUtility.serializeResponse(null);
   }
 
