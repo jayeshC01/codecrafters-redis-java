@@ -28,6 +28,6 @@ public class RespCommand {
   }
 
   public String getStringRepresentation() {
-    return name.concat(args.toString());
+    return name.concat(" ").concat(args.toString());
   }
 }

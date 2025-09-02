@@ -23,8 +23,8 @@ public class CommandProcessor {
 
     return switch (cmd.getName().toUpperCase()) {
       case "PING" -> RespUtility.buildSimpleResponse("PONG");
-      case "ECHO" -> processCommandEcho(cmd);
-      case "SET" -> processCommandSet(cmd);
+      case "ECHO" -> processEcho(cmd);
+      case "SET" -> processSet(cmd);
       case "GET" -> processCommandGet(cmd);
       case "INCR" -> processCommandIncr(cmd);
       case "MULTI" -> processCommandMulti();
@@ -36,6 +36,7 @@ public class CommandProcessor {
       case "LLEN" -> processCommandLlen(cmd);
       case "LPOP" -> processCommandLpop(cmd);
       case "BLPOP" -> processCommandBlpop(cmd);
+      case "TYPE" -> processType(cmd);
       default -> RespUtility.buildErrorResponse("Invalid Command: " + cmd);
     };
   }
@@ -55,7 +56,6 @@ public class CommandProcessor {
     DataStoreValue data = DataStore.get(key);
     // If data is present fetch and return it
     if (data != null && !data.getAsLinkedList().isEmpty()) {
-      System.out.println("Serializing the output of BLPOP command: " + data.getAsLinkedList());
       return RespUtility.serializeResponse(List.of(key, data.getAsLinkedList().poll()));
     }
 
@@ -81,7 +81,6 @@ public class CommandProcessor {
     data = DataStore.get(key);
     // If data is present fetch and return it
     if (data != null && !data.getAsLinkedList().isEmpty()) {
-      System.out.println("Serializing the output of BLPOP command after wait: " + data.getAsLinkedList());
       return RespUtility.serializeResponse(List.of(key, data.getAsLinkedList().poll()));
     }
 
@@ -98,8 +97,16 @@ public class CommandProcessor {
     }
 
     // Default fallback (shouldn’t happen, but safe)
-    System.out.println("Serializing the null response of BLPOP command:");
     return RespUtility.serializeResponse(null);
+  }
+
+  private String processType(RespCommand cmd) {
+    if(cmd.getArgsSize() != 1) {
+      return RespUtility.buildErrorResponse("Invalid arguments");
+    }
+    String key = cmd.getArgs().get(0);
+    DataStoreValue data = DataStore.get(key);
+    return RespUtility.buildSimpleResponse(data == null ? "none" : data.getValueType());
   }
 
   private String processCommandLpop(RespCommand cmd) {
@@ -211,7 +218,7 @@ public class CommandProcessor {
     return RespUtility.serializeResponse(data.getAsList().size());
   }
 
-  private String processCommandEcho(RespCommand cmd) {
+  private String processEcho(RespCommand cmd) {
     if (cmd.getArgsSize() !=1 ) {
       return RespUtility.buildErrorResponse("invalid command ECHO - wrong number of arguments");
     }
@@ -229,7 +236,7 @@ public class CommandProcessor {
     return RespUtility.serializeResponse(null);
   }
 
-  private String processCommandSet(RespCommand cmd) {
+  private String processSet(RespCommand cmd) {
     List<String> args = cmd.getArgs();
 
     if (args.size() < 2 || args.size() > 4) {

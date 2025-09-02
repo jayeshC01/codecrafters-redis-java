@@ -49,4 +49,17 @@ public class DataStoreValue {
   public Long getAsLong() {
     return Long.parseLong(String.valueOf(value));
   }
+
+  public String getValueType() {
+    if (value instanceof String || value instanceof Number) {
+      return "string";
+    } else if (value instanceof List) {
+      return "list";
+    } else if (value instanceof Set) {
+      return "set";
+    } else if (value instanceof Map) {
+      return "hash";
+    }
+    return "undefined";
+  }
 }
