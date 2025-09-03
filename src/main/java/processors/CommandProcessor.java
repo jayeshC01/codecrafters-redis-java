@@ -3,6 +3,8 @@ package processors;
 import db.DataStore;
 import models.DataStoreValue;
 import models.RespCommand;
+import processors.streams.XADDExecutor;
+import processors.streams.XRANGEExecutor;
 import utility.RespUtility;
 
 import java.util.*;
@@ -38,6 +40,7 @@ public class CommandProcessor {
       case "BLPOP" -> processCommandBlpop(cmd);
       case "TYPE" -> processType(cmd);
       case "XADD" -> new XADDExecutor().execute(cmd);
+      case "XRANGE" -> new XRANGEExecutor().execute(cmd);
       default -> RespUtility.buildErrorResponse("Invalid Command: " + cmd);
     };
   }
