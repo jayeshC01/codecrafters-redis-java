@@ -17,9 +17,8 @@ public class XADDExecutor implements CommandExecutor {
   @Override
   public String execute(RespCommand cmd) {
     String key = cmd.getKey();
-    // Later remove sublist when RespCommand is updated
+    // TODO: Later remove sublist when RespCommand is updated
     List<String> args = cmd.getArgs().subList(1, cmd.getArgsSize());
-
     String entryID = args.get(0);
     Map<String, String> entryValue = new HashMap<>();
     for (int i = 1; i < args.size(); i += 2) {

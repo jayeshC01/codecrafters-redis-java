@@ -1,5 +1,6 @@
 package models;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class RespCommand {
@@ -12,19 +13,19 @@ public class RespCommand {
   }
 
   public List<String> getArgs() {
-    return this.args;
+    return args;
   }
 
   public String getName() {
-    return this.name.toUpperCase();
+    return name.toUpperCase();
   }
 
   public int getArgsSize() {
-    return this.args.size();
+    return args.size();
   }
 
   public boolean areArgsEmpty() {
-    return this.args.isEmpty();
+    return args.isEmpty();
   }
 
   public String getKey(){
