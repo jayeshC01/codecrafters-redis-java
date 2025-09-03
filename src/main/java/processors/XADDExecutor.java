@@ -39,24 +39,20 @@ public class XADDExecutor implements CommandExecutor {
       }
     }
 
-    String validationError = validateStreamID(entryID, stream);
-    if (validationError != null) {
-      return RespUtility.buildErrorResponse(validationError);
+    String generatedID;
+    try {
+      generatedID = generateStreamID(entryID, stream);
+    } catch (IllegalArgumentException e) {
+      return RespUtility.buildErrorResponse(e.getMessage());
     }
 
-    stream.put(entryID, entryValue);
-    return RespUtility.serializeResponse(entryID);
+    stream.put(generatedID, entryValue);
+    return RespUtility.serializeResponse(generatedID);
   }
 
-  /**
-   * Validates stream ID according to Redis rules:
-   * 1. Must match <ms>-<seq> format
-   * 2. Must be strictly greater than last ID in stream
-   * 3. Must be >= 0-1
-   */
-  private String validateStreamID(String entryID, ConcurrentNavigableMap<String, Map<String, String>> stream) {
+  private void validateStreamID(String entryID, ConcurrentNavigableMap<String, Map<String, String>> stream) {
     if (!entryID.matches("\\d+-\\d+")) {
-      return "invalid stream ID format";
+      throw new IllegalArgumentException("invalid stream ID format");
     }
 
     String[] parts = entryID.split("-");
@@ -64,17 +60,15 @@ public class XADDExecutor implements CommandExecutor {
     long seq = Long.parseLong(parts[1]);
 
     if (ms == 0 && seq == 0) {
-      return "The ID specified in XADD must be greater than 0-0";
+      throw new IllegalArgumentException("The ID specified in XADD must be greater than 0-0");
     }
 
     if (!stream.isEmpty()) {
       String lastId = stream.lastKey();
       if (!isGreater(entryID, lastId)) {
-        return "The ID specified in XADD is equal or smaller than the target stream top item";
+        throw new IllegalArgumentException("The ID specified in XADD is equal or smaller than the target stream top item");
       }
     }
-
-    return null; // Valid
   }
 
   /**
@@ -90,4 +84,47 @@ public class XADDExecutor implements CommandExecutor {
 
     return (newMs > oldMs) || (newMs == oldMs && newSeq > oldSeq);
   }
-}
+
+  private String generateStreamID(String entryID, ConcurrentNavigableMap<String, Map<String, String>> stream) {
+    long ms, seq;
+    if (entryID.equals("*")) {
+      ms = System.currentTimeMillis();
+      seq = 0;
+      if (!stream.isEmpty()) {
+        String lastId = stream.lastKey();
+        String[] parts = lastId.split("-");
+        long lastMs = Long.parseLong(parts[0]);
+        long lastSeq = Long.parseLong(parts[1]);
+
+        if (lastMs == ms) {
+          seq = lastSeq + 1;
+        }
+      }
+
+      return ms + "-" + seq;
+    }
+
+    if (entryID.endsWith("-*")) {
+      ms = Long.parseLong(entryID.split("-")[0]);
+      seq = ms == 0 ? 1: 0;
+
+      if (!stream.isEmpty()) {
+        String lastId = stream.lastKey();
+        String[] parts = lastId.split("-");
+        long lastMs = Long.parseLong(parts[0]);
+        long lastSeq = Long.parseLong(parts[1]);
+
+        if (lastMs == ms) {
+          seq = lastSeq + 1;
+        }
+      }
+
+      String newId = ms + "-" + seq;
+      validateStreamID(newId, stream);
+      return newId;
+    }
+
+    validateStreamID(entryID, stream);
+    return entryID;
+  }
+ }
