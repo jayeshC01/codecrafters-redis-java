@@ -1,6 +1,7 @@
 package models;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentNavigableMap;
 
 public class DataStoreValue {
   private Object value;
@@ -46,6 +47,14 @@ public class DataStoreValue {
     return isList() ? (LinkedList<String>) value : null;
   }
 
+  @SuppressWarnings("unchecked")
+  public ConcurrentNavigableMap<String, Map<String, String>> getAsStream() {
+    if(value instanceof ConcurrentNavigableMap<?,?>) {
+      return (ConcurrentNavigableMap<String, Map<String, String>>) value;
+    }
+    return null;
+  }
+
   public Long getAsLong() {
     return Long.parseLong(String.valueOf(value));
   }
@@ -57,8 +66,8 @@ public class DataStoreValue {
       return "list";
     } else if (value instanceof Set) {
       return "set";
-    } else if (value instanceof Map) {
-      return "hash";
+    } else if(value instanceof ConcurrentNavigableMap<?,?>){
+      return "stream";
     }
     return "undefined";
   }

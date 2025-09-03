@@ -3,10 +3,13 @@ package db;
 import models.DataStoreValue;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class DataStore {
   public static final Map<String, DataStoreValue> store = new ConcurrentHashMap<>();
   public static final Map<String, Queue<Thread>> waiterThreads = new ConcurrentHashMap<>();
+  public static final ConcurrentNavigableMap<String, Map<String, String>>  streams = new ConcurrentSkipListMap<>();
 
   public static DataStoreValue get(String key) {
     return store.get(key);

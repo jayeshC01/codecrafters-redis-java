@@ -27,6 +27,13 @@ public class RespCommand {
     return this.args.isEmpty();
   }
 
+  public String getKey(){
+    if(this.areArgsEmpty()) {
+      return null;
+    }
+    return args.get(0);
+  }
+
   public String getStringRepresentation() {
     return name.concat(" ").concat(args.toString());
   }

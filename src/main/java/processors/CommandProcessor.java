@@ -37,6 +37,7 @@ public class CommandProcessor {
       case "LPOP" -> processCommandLpop(cmd);
       case "BLPOP" -> processCommandBlpop(cmd);
       case "TYPE" -> processType(cmd);
+      case "XADD" -> new XADDExecutor().execute(cmd);
       default -> RespUtility.buildErrorResponse("Invalid Command: " + cmd);
     };
   }
