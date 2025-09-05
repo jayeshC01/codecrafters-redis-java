@@ -3,6 +3,9 @@ package processors;
 import db.DataStore;
 import models.DataStoreValue;
 import models.RespCommand;
+import processors.lists.BLPOPExecutor;
+import processors.lists.LPUSHExecutor;
+import processors.lists.RPUSHExecutor;
 import processors.streams.XADDExecutor;
 import processors.streams.XRANGEExecutor;
 import utility.RespUtility;
@@ -32,76 +35,17 @@ public class CommandProcessor {
       case "MULTI" -> processCommandMulti();
       case "EXEC" -> processCommandExec();
       case "DISCARD" -> processCommandDiscard();
-      case "RPUSH" -> processCommandRpush(cmd);
-      case "LRANGE" -> processCommandLrange(cmd);
-      case "LPUSH" -> processCommandLpush(cmd);
+      case "TYPE" -> processType(cmd);
       case "LLEN" -> processCommandLlen(cmd);
       case "LPOP" -> processCommandLpop(cmd);
-      case "BLPOP" -> processCommandBlpop(cmd);
-      case "TYPE" -> processType(cmd);
+      case "LRANGE" -> processCommandLrange(cmd);
+      case "RPUSH" -> new RPUSHExecutor().execute(cmd);
+      case "LPUSH" -> new LPUSHExecutor().execute(cmd);
+      case "BLPOP" -> new BLPOPExecutor().execute(cmd);
       case "XADD" -> new XADDExecutor().execute(cmd);
       case "XRANGE" -> new XRANGEExecutor().execute(cmd);
       default -> RespUtility.buildErrorResponse("Invalid Command: " + cmd);
     };
-  }
-
-  private String processCommandBlpop(RespCommand cmd) {
-    String key = cmd.getArgs().get(0);
-    double timeoutSeconds;
-    long timeoutMillis;
-    try {
-      timeoutSeconds = Double.parseDouble(cmd.getArgs().get(1));
-      timeoutMillis = (long) (timeoutSeconds * 1000);
-
-    } catch (NumberFormatException e) {
-      return RespUtility.buildErrorResponse("Invalid timeout argument");
-    }
-
-    DataStoreValue data = DataStore.get(key);
-    // If data is present fetch and return it
-    if (data != null && !data.getAsLinkedList().isEmpty()) {
-      return RespUtility.serializeResponse(List.of(key, data.getAsLinkedList().poll()));
-    }
-
-    // Block the thread
-    Thread currentThread = Thread.currentThread();
-    DataStore.addWaiter(key, currentThread);
-    boolean timedOut = false;
-    synchronized (currentThread) {
-      try {
-        if (timeoutSeconds == 0) {
-          currentThread.wait();  // wait indefinitely
-        } else {
-          currentThread.wait(timeoutMillis); // wait with timeout
-          // After wait returns, check if we woke up due to timeout
-          timedOut = true;
-        }
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        return RespUtility.buildErrorResponse("Interrupted while waiting");
-      }
-    }
-
-    data = DataStore.get(key);
-    // If data is present fetch and return it
-    if (data != null && !data.getAsLinkedList().isEmpty()) {
-      return RespUtility.serializeResponse(List.of(key, data.getAsLinkedList().poll()));
-    }
-
-    // If we timed out and no data arrived, remove from waiterThreads
-    if (timedOut) {
-      Queue<Thread> queue = DataStore.getWaiters(key);
-      if (queue != null) {
-        queue.remove(currentThread);
-        if (queue.isEmpty()) {
-          DataStore.cleanUpWaiter(key);
-        }
-      }
-      return "*-1\r\n";
-    }
-
-    // Default fallback (shouldn’t happen, but safe)
-    return RespUtility.serializeResponse(null);
   }
 
   private String processType(RespCommand cmd) {
