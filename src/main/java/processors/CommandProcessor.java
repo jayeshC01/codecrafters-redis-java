@@ -8,6 +8,7 @@ import processors.lists.LPUSHExecutor;
 import processors.lists.RPUSHExecutor;
 import processors.streams.XADDExecutor;
 import processors.streams.XRANGEExecutor;
+import processors.streams.XREADExecutor;
 import utility.RespUtility;
 
 import java.util.*;
@@ -44,6 +45,7 @@ public class CommandProcessor {
       case "BLPOP" -> new BLPOPExecutor().execute(cmd);
       case "XADD" -> new XADDExecutor().execute(cmd);
       case "XRANGE" -> new XRANGEExecutor().execute(cmd);
+      case "XREAD" -> new XREADExecutor().execute(cmd);
       default -> RespUtility.buildErrorResponse("Invalid Command: " + cmd);
     };
   }
@@ -103,22 +105,7 @@ public class CommandProcessor {
     }
   }
 
-  private String processCommandLpush(RespCommand cmd) {
-    String key = cmd.getArgs().get(0);
-    DataStoreValue data = DataStore.get(key);
-    List<String> elementsToPush = cmd.getArgs().subList(1, cmd.getArgsSize());
-    if(data == null) {
-      DataStore.put(key, new DataStoreValue(elementsToPush));
-      DataStore.notifyWaiter(key);
-      return RespUtility.serializeResponse(cmd.getArgsSize()-1);
-    }
 
-    LinkedList<String> existingList = new LinkedList<String>(data.getAsList());
-    elementsToPush.forEach(existingList::addFirst);
-    data.updateValue(existingList);
-    DataStore.notifyWaiter(key);
-    return RespUtility.serializeResponse(data.getAsList().size());
-  }
 
 
 
@@ -149,21 +136,6 @@ public class CommandProcessor {
     } catch (Exception e) {
       return RespUtility.buildErrorResponse("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
-  }
-
-  private String processCommandRpush(RespCommand cmd) {
-    String key = cmd.getArgs().get(0);
-    List<String> elementsToPush = cmd.getArgs().subList(1, cmd.getArgsSize());
-    DataStoreValue data = DataStore.get(key);
-    if(data == null) {
-      DataStore.put(key, new DataStoreValue(new LinkedList<>(elementsToPush)));
-      DataStore.notifyWaiter(key);
-      return RespUtility.serializeResponse(cmd.getArgsSize()-1);
-    }
-    LinkedList<String> existingList = data.getAsLinkedList();
-    existingList.addAll(elementsToPush);
-    DataStore.notifyWaiter(key);
-    return RespUtility.serializeResponse(data.getAsList().size());
   }
 
   private String processEcho(RespCommand cmd) {
@@ -266,7 +238,7 @@ public class CommandProcessor {
       return RespUtility.serializeResponse(List.of());
     }
     List<String> responses = queuedCommands.stream()
-        .map(cmd -> processCommand(cmd))
+        .map(this::processCommand)
         .collect(Collectors.toList());
     queuedCommands.clear();
     return RespUtility.serializeResponse(responses);
